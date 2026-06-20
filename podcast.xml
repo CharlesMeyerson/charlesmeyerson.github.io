@@ -31,11 +31,7 @@
     <itunes:explicit>false</itunes:explicit>
 
     <!-- AUTO‑IMPORTED EPISODES FROM RSS‑FUSION -->
-    <!-- This line tells podcast apps to pull all <item> entries from your merged feed -->
     <atom:link href="https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" rel="via" type="application/rss+xml" />
-
-    <!-- The actual episodes will be read from the RSS‑Fusion feed -->
-    <!-- No <item> blocks are needed here -->
 
   </channel>
 </rss>
