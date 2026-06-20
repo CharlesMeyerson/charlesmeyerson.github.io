@@ -28,7 +28,7 @@ jobs:
           # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
 
-      - name: Build final podcast.xml
+           - name: Build final podcast.xml
         run: |
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
@@ -45,4 +45,12 @@ jobs:
             echo '      <itunes:name>Charles Meyerson</itunes:name>'
             echo '      <itunes:email>Meyerson@gmail.com</itunes:email>'
             echo '    </itunes:owner>'
-            echo
+            echo '    <itunes:image href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhViJz7eAAy3Axe4cOf6Wr70aavqYU4dJZjfGg8g20wQHjO4s_AV675bT4Bv2Xlo2aGJ5OHp3DjxRVq9pVR0_QJV_MCElPVWSZ1K8XzsmnxQhshns7PEIbghcvAnYK5Id_OYLP4qwloZ2n3SPw88W_UoP_SROfevVPElIJhLBp2twfR3FEmBOzw/s1600/meyerson-strategy-logo2.png" />'
+            echo '    <itunes:category text="News">'
+            echo '      <itunes:category text="Interviews"/>'
+            echo '    </itunes:category>'
+            echo '    <itunes:explicit>false</itunes:explicit>'
+            cat items.xml
+            echo '  </channel>'
+            echo '</rss>'
+          } > podcast.xml
