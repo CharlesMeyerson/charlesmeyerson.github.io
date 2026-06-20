@@ -26,7 +26,6 @@
 
     <itunes:explicit>false</itunes:explicit>
 
-    <!-- SAMPLE EPISODE (replace with real ones later) -->
     <item>
       <title>Sample Episode</title>
       <description>This is a placeholder episode. Replace with real content.</description>
