@@ -2,8 +2,8 @@ name: Build Podcast Feed
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours
-  workflow_dispatch:        # allow manual rebuilds
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,51 +17,36 @@ jobs:
         run: |
           curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" -o rssfusion.xml
 
-      - name: Extract <item> entries
+      - name: Extract item entries
         run: |
           awk '/<item>/{flag=1} flag; /<\/item>/{flag=0}' rssfusion.xml > items.xml
 
       - name: Build final podcast.xml
         run: |
-          cat > podcast.xml << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0"
-     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
-     xmlns:atom="http://www.w3.org/2005/Atom">
-
-  <channel>
-
-    <title>Charlie Meyerson Interviews</title>
-    <link>https://charlesmeyerson.github.io/podcast.xml</link>
-    <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />
-    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>
-    <language>en-us</language>
-    <copyright>2026 Charles Meyerson</copyright>
-
-    <itunes:author>Charles Meyerson</itunes:author>
-    <itunes:owner>
-      <itunes:name>Charles Meyerson</itunes:name>
-      <itunes:email>Meyerson@gmail.com</itunes:email>
-    </itunes:owner>
-
-    <itunes:image href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhViJz7eAAy3Axe4cOf6Wr70aavqYU4dJZjfGg8g20wQHjO4s_AV675bT4Bv2Xlo2aGJ5OHp3DjxRVq9pVR0_QJV_MCElPVWSZ1K8XzsmnxQhshns7PEIbghcvAnYK5Id_OYLP4qwloZ2n3SPw88W_UoP_SROfevVPElIJhLBp2twfR3FEmBOzw/s1600/meyerson-strategy-logo2.png" />
-
-    <itunes:category text="News">
-      <itunes:category text="Interviews"/>
-    </itunes:category>
-
-    <itunes:explicit>false</itunes:explicit>
-
-EOF
-
-          cat items.xml >> podcast.xml
-
-          echo "</channel></rss>" >> podcast.xml
+          {
+            echo '<?xml version="1.0" encoding="UTF-8"?>'
+            echo '<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">'
+            echo '  <channel>'
+            echo '    <title>Charlie Meyerson Interviews</title>'
+            echo '    <link>https://charlesmeyerson.github.io/podcast.xml</link>'
+            echo '    <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />'
+            echo '    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>'
+            echo '    <language>en-us</language>'
+            echo '    <copyright>2026 Charles Meyerson</copyright>'
+            echo '    <itunes:author>Charles Meyerson</itunes:author>'
+            echo '    <itunes:owner><itunes:name>Charles Meyerson</itunes:name><itunes:email>Meyerson@gmail.com</itunes:email></itunes:owner>'
+            echo '    <itunes:image href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhViJz7eAAy3Axe4cOf6Wr70aavqYU4dJZjfGg8g20wQHjO4s_AV675bT4Bv2Xlo2aGJ5OHp3DjxRVq9pVR0_QJV_MCElPVWSZ1K8XzsmnxQhshns7PEIbghcvAnYK5Id_OYLP4qwloZ2n3SPw88W_UoP_SROfevVPElIJhLBp2twfR3FEmBOzw/s1600/meyerson-strategy-logo2.png" />'
+            echo '    <itunes:category text="News"><itunes:category text="Interviews"/></itunes:category>'
+            echo '    <itunes:explicit>false</itunes:explicit>'
+            cat items.xml
+            echo '  </channel>'
+            echo '</rss>'
+          } > podcast.xml
 
       - name: Commit and push changes
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add podcast.xml
-          git commit -m "Auto-update podcast feed" || echo "No changes"
+          git commit -m "Auto-update podcast feed" || true
           git push
