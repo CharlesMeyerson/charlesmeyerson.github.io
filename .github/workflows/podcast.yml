@@ -54,3 +54,12 @@ jobs:
             echo '  </channel>'
             echo '</rss>'
           } > podcast.xml
+
+                - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add podcast.xml
+          git commit -m "Auto-update podcast feed" || true
+          git push
+
