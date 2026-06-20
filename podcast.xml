@@ -4,36 +4,38 @@
      xmlns:atom="http://www.w3.org/2005/Atom">
 
   <channel>
-    <title>Meyerson Strategy Podcast</title>
+
+    <!-- Core Podcast Metadata -->
+    <title>Charlie Meyerson Interviews</title>
     <link>https://charlesmeyerson.github.io/podcast.xml</link>
     <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />
-    <description>Interviews, insights, and commentary curated by Charles Meyerson.</description>
-
+    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>
     <language>en-us</language>
     <copyright>2026 Charles Meyerson</copyright>
 
+    <!-- Required for Apple + YouTube -->
     <itunes:author>Charles Meyerson</itunes:author>
     <itunes:owner>
       <itunes:name>Charles Meyerson</itunes:name>
       <itunes:email>Meyerson@gmail.com</itunes:email>
     </itunes:owner>
 
-    <itunes:image href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjrj9x8qv0d0xZ0p5l6W2u2l9x0x0x0x0x0x0x/s1600/podcast-artwork.png" />
+    <!-- Required artwork -->
+    <itunes:image href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhViJz7eAAy3Axe4cOf6Wr70aavqYU4dJZjfGg8g20wQHjO4s_AV675bT4Bv2Xlo2aGJ5OHp3DjxRVq9pVR0_QJV_MCElPVWSZ1K8XzsmnxQhshns7PEIbghcvAnYK5Id_OYLP4qwloZ2n3SPw88W_UoP_SROfevVPElIJhLBp2twfR3FEmBOzw/s1600/meyerson-strategy-logo2.png" />
 
+    <!-- Categories -->
     <itunes:category text="News">
-      <itunes:category text="Commentary"/>
+      <itunes:category text="Interviews"/>
     </itunes:category>
 
     <itunes:explicit>false</itunes:explicit>
 
-    <item>
-      <title>Sample Episode</title>
-      <description>This is a placeholder episode. Replace with real content.</description>
-      <pubDate>Sat, 20 Jun 2026 12:00:00 -0500</pubDate>
-      <guid isPermaLink="false">sample-episode-1</guid>
-      <enclosure url="https://example.com/audio/sample.mp3" length="12345" type="audio/mpeg" />
-      <itunes:duration>00:01:00</itunes:duration>
-    </item>
+    <!-- AUTO‑IMPORTED EPISODES FROM RSS‑FUSION -->
+    <!-- This line tells podcast apps to pull all <item> entries from your merged feed -->
+    <atom:link href="https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" rel="via" type="application/rss+xml" />
+
+    <!-- The actual episodes will be read from the RSS‑Fusion feed -->
+    <!-- No <item> blocks are needed here -->
 
   </channel>
 </rss>
