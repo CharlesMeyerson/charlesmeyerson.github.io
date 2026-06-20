@@ -28,7 +28,7 @@ jobs:
           # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
 
-           - name: Build final podcast.xml
+      - name: Build final podcast.xml
         run: |
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
