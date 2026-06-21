@@ -1,6 +1,6 @@
 const fs = require("fs");
 const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
-const fetch = require("node-fetch");
+
 // Working fetch for Node.js 18–22 in CommonJS
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
