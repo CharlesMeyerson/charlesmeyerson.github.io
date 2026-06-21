@@ -17,26 +17,18 @@ function extractMp3FromHtml(html) {
   return matches ? matches[0] : null;
 }
 
-// Extract MP3 from Archive.org iframe embed
-async function extractMp3FromIframe(html) {
-  const iframeRegex = /<iframe[^>]+src="([^"]+)"/i;
-  const match = html.match(iframeRegex);
-  if (!match) return null;
-
-  const iframeUrl = match[1];
-
-  try {
-    const res = await fetch(iframeUrl);
-    const text = await res.text();
-    return extractMp3FromHtml(text);
-  } catch {
-    return null;
-  }
-}
-
 async function fetchFeed(url) {
   const res = await fetch(url);
   return await res.text();
+}
+
+async function fetchPostHtml(url) {
+  try {
+    const res = await fetch(url);
+    return await res.text();
+  } catch {
+    return null;
+  }
 }
 
 (async () => {
@@ -73,6 +65,14 @@ async function fetchFeed(url) {
 
     if (!titleNode || !linkNode || !pubDateNode) continue;
 
+    const postUrl = linkNode.textContent.trim();
+    const postHtml = await fetchPostHtml(postUrl);
+    if (!postHtml) continue;
+
+    // Extract MP3 from the actual blog post HTML
+    const mp3Url = extractMp3FromHtml(postHtml);
+    if (!mp3Url) continue; // Option A strict: skip if no MP3
+
     const serializer = new XMLSerializer();
     let xml = serializer.serializeToString(item);
 
@@ -89,17 +89,6 @@ async function fetchFeed(url) {
     // Remove existing enclosures
     xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
 
-    // Try direct MP3 extraction
-    let mp3Url = extractMp3FromHtml(xml);
-
-    // If none found, try iframe extraction
-    if (!mp3Url) {
-      mp3Url = await extractMp3FromIframe(xml);
-    }
-
-    // Skip episodes with no MP3 (Option A)
-    if (!mp3Url) continue;
-
     // Insert enclosure
     xml = xml.replace(
       /<title>/i,
@@ -113,5 +102,6 @@ async function fetchFeed(url) {
   </channel>
 </rss>`;
 
+  // Write to repo root
   fs.writeFileSync("../podcast.xml", output);
 })();
