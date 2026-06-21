@@ -10,70 +10,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install XML tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxml2-utils
-
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Fetch source feeds (FeedBurner)
+      - name: Install Node dependencies
+        run: |
+          npm init -y
+          npm install @xmldom/xmldom
+
+      - name: Fetch source feeds
         run: |
           curl -L "https://feeds.feedburner.com/meyersonstrategy/podcasts" -o feed1.xml
           curl -L "https://feeds.feedburner.com/chicagopublicsquare/podcasts" -o feed2.xml
 
-      - name: Merge feeds safely
+      - name: Merge feeds with Node.js
         run: |
-          {
-            echo '<?xml version="1.0" encoding="UTF-8"?>'
-            echo '<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">'
-            echo '  <channel>'
-            echo '    <title>Charlie Meyerson Interviews</title>'
-            echo '    <link>https://charlesmeyerson.github.io/podcast.xml</link>'
-            echo '    <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />'
-            echo '    <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>'
-            echo '    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>'
-            echo '    <language>en-us</language>'
-            echo '    <copyright>2026 Charles Meyerson</copyright>'
-            echo '    <itunes:author>Charles Meyerson</itunes:author>'
-            echo '    <itunes:owner>'
-            echo '      <itunes:name>Charles Meyerson</itunes:name>'
-            echo '      <itunes:email>Meyerson@gmail.com</itunes:email>'
-            echo '    </itunes:owner>'
-            echo '    <itunes:image href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhViJz7eAAy3Axe4cOf6Wr70aavqYU4dJZjfGg8g20wQHjO4s_AV675bT4Bv2Xlo2aGJ5OHp3DjxRVq9pVR0_QJV_MCElPVWSZ1K8XzsmnxQhshns7PEIbghcvAnYK5Id_OYLP4qwloZ2n3SPw88W_UoP_SROfevVPElIJhLBp2twfR3FEmBOzw/s1600/meyerson-strategy-logo2.png" />'
-            echo '    <itunes:category text="News">'
-            echo '      <itunes:category text="Interviews"/>'
-            echo '    </itunes:category>'
-            echo '    <itunes:explicit>false</itunes:explicit>'
-            xmllint --xpath "//item" feed1.xml > items1.xml
-            xmllint --xpath "//item" feed2.xml > items2.xml
-            cat items1.xml items2.xml > items_merged.xml
-            awk '
-              BEGIN { RS="</item>"; ORS="" }
-              NR>1 {
-                item = $0 "</item>"
-                match(item, /<link>([^<]+)<\/link>/, arr)
-                url = arr[1]
-                cmd = "printf \"%s\" \"" url "\" | sha1sum"
-                cmd | getline hash
-                close(cmd)
-                sub(/ .*/, "", hash)
-                sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
-                if (match(item, /<pubDate>([^<]+)<\/pubDate>/, d)) {
-                  date = d[1]
-                  gsub(/  +/, " ", date)
-                  sub(/<pubDate>[^<]+<\/pubDate>/, "<pubDate>" date "</pubDate>", item)
-                }
-                sub(/<\/pubDate>/, "</pubDate>\n<itunes:duration>00:30:00</itunes:duration>", item)
-                sub(/<\/link>/, "</link>\n<enclosure url=\"" url "\" type=\"audio/mpeg\" />", item)
-                printf -v ep "%03d", NR-1
-                sub(/<\/link>/, "</link>\n<itunes:episode>" ep "</itunes:episode>", item)
-                if (match(item, /<description>([^<]+)<\/description>/, s)) {
-                  summary = s[1]
-                  gsub(/<\/?[^>]+>/, "", summary)
-                  sub(/<description>[^<]+<\/description>/,
-                      "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>",
-                      item)
-                }
-                if (match(item, /<title>([^<]+)<\/title>
+          node scripts/merge-feeds.js
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add podcast.xml
+          git commit -m "Auto-update merged podcast feed" || true
+          git push
+
+      - name: Ping WebSub hub
+        run: |
+          curl -X POST https://pubsubhubbub.appspot.com/publish \
+            -d "hub.mode=publish" \
+            -d "hub.url=https://charlesmeyerson.github.io/podcast.xml"
