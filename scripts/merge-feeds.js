@@ -9,7 +9,7 @@ const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
 // ------------------------------------------------------------
-// HTML ENTITY DECODER (FeedBurner escapes <content:encoded>)
+// HTML ENTITY DECODER
 // ------------------------------------------------------------
 function decodeHtmlEntities(str) {
   return str
@@ -79,21 +79,18 @@ async function extractMp3FromPodbean(itemUrl) {
 // MASTER EXTRACTION PIPELINE
 // ------------------------------------------------------------
 async function extractMp3FromItemContent(contentHtml) {
-  // 1️⃣ Direct MP3s
   let mp3 = extractDirectMp3(contentHtml);
   if (mp3) {
     console.log(`✅ Direct MP3 found: ${mp3}`);
     return mp3;
   }
 
-  // 2️⃣ Archive.org
   const archiveUrl = extractArchiveItemUrl(contentHtml);
   if (archiveUrl) {
     const archiveMp3 = await extractMp3FromArchiveItem(archiveUrl);
     if (archiveMp3) return archiveMp3;
   }
 
-  // 3️⃣ PodBean
   const podbeanUrl = extractPodbeanUrl(contentHtml);
   if (podbeanUrl) {
     const podbeanMp3 = await extractMp3FromPodbean(podbeanUrl);
@@ -173,6 +170,12 @@ async function fetchFeed(url) {
     xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
     xml = xml.replace(/<title>/i, `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`);
 
+    // Wrap description in CDATA to prevent XML breakage
+    xml = xml.replace(
+      /<description>([\s\S]*?)<\/description>/i,
+      (match, inner) => `<description><![CDATA[${inner}]]></description>`
+    );
+
     output += xml + "\n";
   }
 
@@ -180,7 +183,6 @@ async function fetchFeed(url) {
   </channel>
 </rss>`;
 
-  // IMPORTANT: write to repo root, not parent directory
   fs.writeFileSync("podcast.xml", output);
   console.log("✅ podcast.xml written successfully.");
 })();
