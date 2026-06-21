@@ -10,9 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch RSS-Fusion feed
+        run: |
+          curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" -o rssfusion.xml
+
       - name: Extract item entries (XML-safe)
         run: |
-          # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
 
       - name: Build final podcast.xml
@@ -24,12 +36,8 @@ jobs:
             echo '    <title>Charlie Meyerson Interviews</title>'
             echo '    <link>https://charlesmeyerson.github.io/podcast.xml</link>'
             echo '    <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />'
-
-            # >>> INSERTED WEBSUB TAGS <<<
             echo '    <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>'
             echo '    <link rel="self" href="https://charlesmeyerson.github.io/podcast.xml"/>'
-            # >>> END INSERTION <<<
-
             echo '    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>'
             echo '    <language>en-us</language>'
             echo '    <copyright>2026 Charles Meyerson</copyright>'
@@ -61,4 +69,3 @@ jobs:
           git add podcast.xml
           git commit -m "Auto-update podcast feed" || true
           git push
-          
