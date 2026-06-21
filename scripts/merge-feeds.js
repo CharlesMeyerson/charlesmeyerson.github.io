@@ -1,20 +1,37 @@
 const fs = require("fs");
 const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
+const crypto = require("crypto");
 
 // Working fetch for Node.js 18–22 in CommonJS
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-
 // Source feeds
 const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-// Extract real MP3 URL from HTML
-function extractMp3(html) {
-  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3)/i;
-  const match = html.match(mp3Regex);
-  return match ? match[1] : null;
+// Extract direct MP3 URLs from HTML
+function extractMp3FromHtml(html) {
+  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3)/gi;
+  const matches = html.match(mp3Regex);
+  return matches ? matches[0] : null;
+}
+
+// Extract MP3 from Archive.org iframe embed
+async function extractMp3FromIframe(html) {
+  const iframeRegex = /<iframe[^>]+src="([^"]+)"/i;
+  const match = html.match(iframeRegex);
+  if (!match) return null;
+
+  const iframeUrl = match[1];
+
+  try {
+    const res = await fetch(iframeUrl);
+    const text = await res.text();
+    return extractMp3FromHtml(text);
+  } catch {
+    return null;
+  }
 }
 
 async function fetchFeed(url) {
@@ -49,52 +66,48 @@ async function fetchFeed(url) {
     <itunes:explicit>false</itunes:explicit>
 `;
 
-  allItems.forEach((item, index) => {
-    // Skip malformed or empty items
+  for (const item of allItems) {
     const titleNode = item.getElementsByTagName("title")[0];
     const linkNode = item.getElementsByTagName("link")[0];
     const pubDateNode = item.getElementsByTagName("pubDate")[0];
 
-    if (!titleNode || !linkNode || !pubDateNode) {
-      return;
-    }
+    if (!titleNode || !linkNode || !pubDateNode) continue;
 
     const serializer = new XMLSerializer();
     let xml = serializer.serializeToString(item);
 
-    // Remove ALL existing GUIDs
+    // Remove existing GUIDs
     xml = xml.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
 
     // Insert new GUID
-    const guid = require("crypto")
-      .createHash("sha1")
-      .update(xml)
-      .digest("hex");
-
+    const guid = crypto.createHash("sha1").update(xml).digest("hex");
     xml = xml.replace(
       /<title>/i,
       `<guid isPermaLink="false">${guid}</guid>\n<title>`
     );
 
-    // Remove any existing enclosure tags
+    // Remove existing enclosures
     xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
 
-    // Extract MP3 URL
-    const mp3Url =
-      extractMp3(xml) ||
-      extractMp3(item.textContent || "") ||
-      null;
+    // Try direct MP3 extraction
+    let mp3Url = extractMp3FromHtml(xml);
 
-    // Insert correct enclosure
-    if (mp3Url) {
-      xml = xml.replace(
-        /<title>/i,
-        `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
-      );
+    // If none found, try iframe extraction
+    if (!mp3Url) {
+      mp3Url = await extractMp3FromIframe(xml);
     }
 
+    // Skip episodes with no MP3 (Option A)
+    if (!mp3Url) continue;
+
+    // Insert enclosure
+    xml = xml.replace(
+      /<title>/i,
+      `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
+    );
+
     output += xml + "\n";
-  });
+  }
 
   output += `
   </channel>
