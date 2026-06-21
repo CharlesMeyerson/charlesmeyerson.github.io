@@ -25,12 +25,10 @@ jobs:
 
       - name: Extract item entries (XML-safe)
         run: |
-          # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
 
-      - name: Add GUIDs to each item
+      - name: Enhance items with GUIDs and iTunes metadata
         run: |
-          # Insert a GUID based on the <link> URL into each <item>.
           awk '
             BEGIN { RS="</item>"; ORS="" }
             NR>1 {
@@ -41,10 +39,35 @@ jobs:
               cmd | getline hash
               close(cmd)
               sub(/ .*/, "", hash)
+              # GUID
               sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
+              # pubDate normalization (RFC 2822)
+              if (match(item, /<pubDate>([^<]+)<\/pubDate>/, d)) {
+                date = d[1]
+                gsub(/ +/, " ", date)
+                sub(/<pubDate>[^<]+<\/pubDate>/, "<pubDate>" date "</pubDate>", item)
+              }
+              # iTunes duration placeholder
+              sub(/<\/pubDate>/, "</pubDate>\n<itunes:duration>00:30:00</itunes:duration>", item)
+              # enclosure tag (points to episode URL)
+              sub(/<\/link>/, "</link>\n<enclosure url=\"" url "\" type=\"audio/mpeg\" />", item)
+              # episode numbering
+              printf -v ep "%03d", NR-1
+              sub(/<\/link>/, "</link>\n<itunes:episode>" ep "</itunes:episode>", item)
+              # summary cleanup
+              if (match(item, /<description>([^<]+)<\/description>/, s)) {
+                summary = s[1]
+                gsub(/<\/?[^>]+>/, "", summary)
+                sub(/<description>[^<]+<\/description>/, "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>", item)
+              }
+              # keywords from title and category
+              if (match(item, /<title>([^<]+)<\/title>/, t)) {
+                title = t[1]
+                sub(/<\/description>/, "</description>\n<itunes:keywords>" title ", interviews, journalism</itunes:keywords>", item)
+              }
               print item "\n"
             }
-          ' items.xml > items_with_guid.xml
+          ' items.xml > items_enhanced.xml
 
       - name: Build final podcast.xml
         run: |
@@ -70,7 +93,7 @@ jobs:
             echo '      <itunes:category text="Interviews"/>'
             echo '    </itunes:category>'
             echo '    <itunes:explicit>false</itunes:explicit>'
-            cat items_with_guid.xml
+            cat items_enhanced.xml
             echo '  </channel>'
             echo '</rss>'
           } > podcast.xml
@@ -86,5 +109,5 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add podcast.xml
-          git commit -m "Auto-update podcast feed with GUIDs" || true
+          git commit -m "Auto-update podcast feed with enhanced metadata" || true
           git push
