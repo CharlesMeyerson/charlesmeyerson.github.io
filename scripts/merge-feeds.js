@@ -113,5 +113,5 @@ async function fetchFeed(url) {
   </channel>
 </rss>`;
 
-  fs.writeFileSync("podcast.xml", output);
+  fs.writeFileSync("../podcast.xml", output);
 })();
