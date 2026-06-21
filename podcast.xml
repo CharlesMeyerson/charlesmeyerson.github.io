@@ -20,7 +20,7 @@
 
     <itunes:image href="https://charlesmeyerson.github.io/cover.jpg" />
 
-    <!-- This is your merged feed -->
+    <!-- IMPORT ALL EPISODES FROM YOUR MERGED FEED -->
     <atom:link href="https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" rel="via" />
 
   </channel>
