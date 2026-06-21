@@ -16,7 +16,7 @@ jobs:
       - name: Install Node dependencies
         run: |
           npm init -y
-          npm install @xmldom/xmldom
+          npm install @xmldom/xmldom node-fetch
 
       - name: Fetch source feeds
         run: |
