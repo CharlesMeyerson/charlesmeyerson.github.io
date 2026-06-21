@@ -8,8 +8,22 @@ const fetch = (...args) =>
 const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-// -------------------- BASIC HELPERS --------------------
+// ------------------------------------------------------------
+// HTML ENTITY DECODER (FeedBurner escapes <content:encoded>)
+// ------------------------------------------------------------
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
 
+// ------------------------------------------------------------
+// BASIC HELPERS
+// ------------------------------------------------------------
 async function fetchText(url) {
   try {
     const res = await fetch(url);
@@ -38,8 +52,9 @@ function extractPodbeanUrl(html) {
   return matches ? matches[0] : null;
 }
 
-// -------------------- HOST-SPECIFIC EXTRACTION --------------------
-
+// ------------------------------------------------------------
+// HOST-SPECIFIC EXTRACTION
+// ------------------------------------------------------------
 async function extractMp3FromArchiveItem(itemUrl) {
   console.log(`🔍 Fetching Archive.org item: ${itemUrl}`);
   const html = await fetchText(itemUrl);
@@ -60,8 +75,9 @@ async function extractMp3FromPodbean(itemUrl) {
   return mp3;
 }
 
-// -------------------- MASTER EXTRACTION PIPELINE --------------------
-
+// ------------------------------------------------------------
+// MASTER EXTRACTION PIPELINE
+// ------------------------------------------------------------
 async function extractMp3FromItemContent(contentHtml) {
   // 1️⃣ Direct MP3s
   let mp3 = extractDirectMp3(contentHtml);
@@ -88,16 +104,18 @@ async function extractMp3FromItemContent(contentHtml) {
   return null;
 }
 
-// -------------------- FEED FETCHING --------------------
-
+// ------------------------------------------------------------
+// FEED FETCHING
+// ------------------------------------------------------------
 async function fetchFeed(url) {
   console.log(`📡 Fetching feed: ${url}`);
   const text = await fetchText(url);
   return text || "";
 }
 
-// -------------------- MAIN SCRIPT --------------------
-
+// ------------------------------------------------------------
+// MAIN SCRIPT
+// ------------------------------------------------------------
 (async () => {
   const xml1 = await fetchFeed(FEED1);
   const xml2 = await fetchFeed(FEED2);
@@ -124,7 +142,7 @@ async function fetchFeed(url) {
     <itunes:explicit>false</itunes:explicit>
 `;
 
-      for (const item of allItems) {
+  for (const item of allItems) {
     const titleNode = item.getElementsByTagName("title")[0];
     const contentNode = item.getElementsByTagName("content:encoded")[0];
     const descNode = item.getElementsByTagName("description")[0];
@@ -132,10 +150,12 @@ async function fetchFeed(url) {
     const title = titleNode ? titleNode.textContent.trim() : "(untitled)";
     console.log(`\n🎙 Processing: ${title}`);
 
-    const contentHtml =
+    const rawHtml =
       (contentNode && contentNode.textContent) ||
       (descNode && descNode.textContent) ||
       "";
+
+    const contentHtml = decodeHtmlEntities(rawHtml);
 
     const mp3Url = await extractMp3FromItemContent(contentHtml);
     if (!mp3Url) {
@@ -160,9 +180,7 @@ async function fetchFeed(url) {
   </channel>
 </rss>`;
 
-  fs.writeFileSync("../podcast.xml", output);
+  // IMPORTANT: write to repo root, not parent directory
+  fs.writeFileSync("podcast.xml", output);
   console.log("✅ podcast.xml written successfully.");
 })();
-
-
-
