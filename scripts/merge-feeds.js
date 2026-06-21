@@ -1,46 +1,28 @@
-const fs = require("fs");
-const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
-const crypto = require("crypto");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+Run node scripts/merge-feeds.js
+/home/runner/work/charlesmeyerson.github.io/charlesmeyerson.github.io/scripts/merge-feeds.js:135
 
-const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
-const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-// --- helpers -------------------------------------------------------------
 
-async function fetchText(url) {
-  try {
-    const res = await fetch(url);
-    return await res.text();
-  } catch (err) {
-    console.error(`❌ Fetch failed for ${url}:`, err.message);
-    return null;
-  }
-}
+SyntaxError: Unexpected end of input
+    at wrapSafe (node:internal/modules/cjs/loader:1713:18)
+    at Module._compile (node:internal/modules/cjs/loader:1755:20)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49
 
-function extractDirectMp3(html) {
-  const re = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
-  const matches = html.match(re);
-  return matches ? matches[0] : null;
-}
+Node.js v22.22.3
+Error: Process completed with exit code 1.
 
-function extractArchiveItemUrl(html) {
-  const re = /https:\/\/archive\.org\/(?:details|embed)\/[^\s"'<>]+/gi;
-  const matches = html.match(re);
-  return matches ? matches[0] : null;
-}
-
-function extractPodbeanUrl(html) {
-  const re = /https:\/\/www\.podbean\.com\/ep\/[^\s"'<>]+/gi;
-  const matches = html.match(re);
-  return matches ? matches[0] : null;
-}
+// -------------------- HOST-SPECIFIC EXTRACTION --------------------
 
 async function extractMp3FromArchiveItem(itemUrl) {
   console.log(`🔍 Fetching Archive.org item: ${itemUrl}`);
   const html = await fetchText(itemUrl);
   if (!html) return null;
+
   const mp3 = extractDirectMp3(html);
   if (mp3) console.log(`✅ Found MP3 on Archive.org: ${mp3}`);
   return mp3;
@@ -50,10 +32,13 @@ async function extractMp3FromPodbean(itemUrl) {
   console.log(`🔍 Fetching PodBean episode: ${itemUrl}`);
   const html = await fetchText(itemUrl);
   if (!html) return null;
+
   const mp3 = extractDirectMp3(html);
   if (mp3) console.log(`✅ Found MP3 on PodBean: ${mp3}`);
   return mp3;
 }
+
+// -------------------- MASTER EXTRACTION PIPELINE --------------------
 
 async function extractMp3FromItemContent(contentHtml) {
   // 1️⃣ Direct MP3s
@@ -81,13 +66,15 @@ async function extractMp3FromItemContent(contentHtml) {
   return null;
 }
 
-// --- main ---------------------------------------------------------------
+// -------------------- FEED FETCHING --------------------
 
 async function fetchFeed(url) {
   console.log(`📡 Fetching feed: ${url}`);
   const text = await fetchText(url);
   return text || "";
 }
+
+// -------------------- MAIN SCRIPT --------------------
 
 (async () => {
   const xml1 = await fetchFeed(FEED1);
@@ -115,9 +102,8 @@ async function fetchFeed(url) {
     <itunes:explicit>false</itunes:explicit>
 `;
 
-  for (const item of allItems) {
+   for (const item of allItems) {
     const titleNode = item.getElementsByTagName("title")[0];
-    const linkNode = item.getElementsByTagName("link")[0];
     const contentNode = item.getElementsByTagName("content:encoded")[0];
     const descNode = item.getElementsByTagName("description")[0];
 
@@ -132,3 +118,26 @@ async function fetchFeed(url) {
     const mp3Url = await extractMp3FromItemContent(contentHtml);
     if (!mp3Url) {
       console.log(`🚫 Skipping "${title}" — no MP3 found.`);
+      continue;
+    }
+
+    const serializer = new XMLSerializer();
+    let xml = serializer.serializeToString(item);
+
+    xml = xml.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
+    const guid = crypto.createHash("sha1").update(xml).digest("hex");
+    xml = xml.replace(/<title>/i, `<guid isPermaLink="false">${guid}</guid>\n<title>`);
+
+    xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
+    xml = xml.replace(/<title>/i, `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`);
+
+    output += xml + "\n";
+  }
+
+  output += `
+  </channel>
+</rss>`;
+
+  fs.writeFileSync("../podcast.xml", output);
+  console.log("✅ podcast.xml written successfully.");
+})();
