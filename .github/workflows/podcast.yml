@@ -32,6 +32,15 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add podcast.xml
+          git commit -m "Update podcast feed" || echo "No changes to commit"
+          git push
+
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add podcast.xml
           git commit -m "Auto-update merged podcast feed" || true
           git push
 
