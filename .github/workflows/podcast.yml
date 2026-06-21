@@ -11,63 +11,77 @@ jobs:
 
     steps:
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          
+      - name: Install XML tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxml2-utils
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Fetch RSS-Fusion feed
+      - name: Fetch RSS-Fusion feed (raw XML)
         run: |
           curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" -o rssfusion.xml
 
-      - name: Extract item entries (XML-safe)
+      - name: Extract <item> blocks safely using xmllint
         run: |
-          grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
+          xmllint --xpath "//item" rssfusion.xml > items_raw.xml
 
-      - name: Enhance items with GUIDs and iTunes metadata
+      - name: Enhance items (GUID, pubDate, duration, enclosure, episode, summary, keywords)
         run: |
           awk '
             BEGIN { RS="</item>"; ORS="" }
             NR>1 {
               item = $0 "</item>"
+
+              # Extract link
               match(item, /<link>([^<]+)<\/link>/, arr)
               url = arr[1]
+
+              # GUID
               cmd = "printf \"%s\" \"" url "\" | sha1sum"
               cmd | getline hash
               close(cmd)
               sub(/ .*/, "", hash)
-              # GUID
               sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
-              # pubDate normalization (RFC 2822)
+
+              # pubDate normalization (leave as-is but ensure single spacing)
               if (match(item, /<pubDate>([^<]+)<\/pubDate>/, d)) {
                 date = d[1]
-                gsub(/ +/, " ", date)
+                gsub(/  +/, " ", date)
                 sub(/<pubDate>[^<]+<\/pubDate>/, "<pubDate>" date "</pubDate>", item)
               }
-              # iTunes duration placeholder
+
+              # Duration placeholder
               sub(/<\/pubDate>/, "</pubDate>\n<itunes:duration>00:30:00</itunes:duration>", item)
-              # enclosure tag (points to episode URL)
+
+              # Enclosure tag
               sub(/<\/link>/, "</link>\n<enclosure url=\"" url "\" type=\"audio/mpeg\" />", item)
-              # episode numbering
+
+              # Episode numbering
               printf -v ep "%03d", NR-1
               sub(/<\/link>/, "</link>\n<itunes:episode>" ep "</itunes:episode>", item)
-              # summary cleanup
+
+              # Summary cleanup
               if (match(item, /<description>([^<]+)<\/description>/, s)) {
                 summary = s[1]
                 gsub(/<\/?[^>]+>/, "", summary)
-                sub(/<description>[^<]+<\/description>/, "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>", item)
+                sub(/<description>[^<]+<\/description>/,
+                    "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>",
+                    item)
               }
-              # keywords from title and category
+
+              # Keywords from title
               if (match(item, /<title>([^<]+)<\/title>/, t)) {
                 title = t[1]
-                sub(/<\/description>/, "</description>\n<itunes:keywords>" title ", interviews, journalism</itunes:keywords>", item)
+                sub(/<\/description>/,
+                    "</description>\n<itunes:keywords>" title ", interviews, journalism</itunes:keywords>",
+                    item)
               }
+
               print item "\n"
             }
-          ' items.xml > items_enhanced.xml
+          ' items_raw.xml > items_enhanced.xml
 
       - name: Build final podcast.xml
         run: |
