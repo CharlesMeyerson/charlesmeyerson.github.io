@@ -1,34 +1,9 @@
-name: Build Podcast Feed
-
-on:
-  schedule:
-    - cron: "0 */6 * * *"
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Fetch RSS-Fusion feed
-        run: |
-          curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" -o rssfusion.xml
-
       - name: Extract item entries (XML-safe)
         run: |
           # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
 
-            - name: Build final podcast.xml
+      - name: Build final podcast.xml
         run: |
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
@@ -67,7 +42,6 @@ jobs:
             -d "hub.mode=publish" \
             -d "hub.url=https://charlesmeyerson.github.io/podcast.xml"
 
-
       - name: Commit and push changes
         run: |
           git config user.name "GitHub Actions"
@@ -75,5 +49,3 @@ jobs:
           git add podcast.xml
           git commit -m "Auto-update podcast feed" || true
           git push
-
-          
