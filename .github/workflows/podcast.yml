@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Install XML tools
         run: |
           sudo apt-get update
@@ -19,11 +18,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Fetch RSS-Fusion feed (raw XML)
+      - name: Fetch RSS-Fusion feed (true XML)
         run: |
-          curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb" -o rssfusion.xml
+          curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb?format=xml" -o rssfusion.xml
 
-      - name: Extract <item> blocks safely using xmllint
+      - name: Extract <item> blocks safely
         run: |
           xmllint --xpath "//item" rssfusion.xml > items_raw.xml
 
@@ -33,36 +32,22 @@ jobs:
             BEGIN { RS="</item>"; ORS="" }
             NR>1 {
               item = $0 "</item>"
-
-              # Extract link
               match(item, /<link>([^<]+)<\/link>/, arr)
               url = arr[1]
-
-              # GUID
               cmd = "printf \"%s\" \"" url "\" | sha1sum"
               cmd | getline hash
               close(cmd)
               sub(/ .*/, "", hash)
               sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
-
-              # pubDate normalization (leave as-is but ensure single spacing)
               if (match(item, /<pubDate>([^<]+)<\/pubDate>/, d)) {
                 date = d[1]
                 gsub(/  +/, " ", date)
                 sub(/<pubDate>[^<]+<\/pubDate>/, "<pubDate>" date "</pubDate>", item)
               }
-
-              # Duration placeholder
               sub(/<\/pubDate>/, "</pubDate>\n<itunes:duration>00:30:00</itunes:duration>", item)
-
-              # Enclosure tag
               sub(/<\/link>/, "</link>\n<enclosure url=\"" url "\" type=\"audio/mpeg\" />", item)
-
-              # Episode numbering
               printf -v ep "%03d", NR-1
               sub(/<\/link>/, "</link>\n<itunes:episode>" ep "</itunes:episode>", item)
-
-              # Summary cleanup
               if (match(item, /<description>([^<]+)<\/description>/, s)) {
                 summary = s[1]
                 gsub(/<\/?[^>]+>/, "", summary)
@@ -70,15 +55,12 @@ jobs:
                     "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>",
                     item)
               }
-
-              # Keywords from title
               if (match(item, /<title>([^<]+)<\/title>/, t)) {
                 title = t[1]
                 sub(/<\/description>/,
                     "</description>\n<itunes:keywords>" title ", interviews, journalism</itunes:keywords>",
                     item)
               }
-
               print item "\n"
             }
           ' items_raw.xml > items_enhanced.xml
