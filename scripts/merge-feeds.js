@@ -129,10 +129,13 @@ function decodeHtmlEntities(str) {
       `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
     );
 
-    // Wrap description in CDATA
+    // ✅ Wrap description in CDATA safely
     xmlItem = xmlItem.replace(
       /<description>([\s\S]*?)<\/description>/i,
-      (match, inner) => `<description><![CDATA[${inner}]]></description>`
+      (match, inner) => {
+        const safeInner = inner.replace(/]]>/g, "]]]]><![CDATA[>");
+        return `<description><![CDATA[${safeInner}]]></description>`;
+      }
     );
 
     output += xmlItem + "\n";
