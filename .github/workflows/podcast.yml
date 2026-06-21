@@ -21,12 +21,7 @@ jobs:
           npm init -y
           npm install @xmldom/xmldom node-fetch
 
-      - name: Fetch source feeds
-        run: |
-          curl -L "https://feeds.feedburner.com/meyersonstrategy/podcasts" -o feed1.xml
-          curl -L "https://feeds.feedburner.com/chicagopublicsquare/podcasts" -o feed2.xml
-
-      - name: Merge feeds with Node.js
+      - name: Merge feed with Node.js
         run: |
           node scripts/merge-feeds.js
 
