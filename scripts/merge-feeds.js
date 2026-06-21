@@ -2,33 +2,97 @@ const fs = require("fs");
 const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
 const crypto = require("crypto");
 
-// Working fetch for Node.js 18–22 in CommonJS
+// Node 18+ fetch in CommonJS
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-// Source feeds
 const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-// Extract direct MP3 URLs from HTML
-function extractMp3FromHtml(html) {
-  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3)/gi;
+// --- MP3 extraction helpers ---
+
+function extractDirectMp3(html) {
+  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
   const matches = html.match(mp3Regex);
   return matches ? matches[0] : null;
 }
 
-async function fetchFeed(url) {
-  const res = await fetch(url);
-  return await res.text();
+function extractFromAudioTags(html) {
+  const audioRegex = /<(audio|source)[^>]+src="([^"]+\.mp3[^"]*)"/gi;
+  let match;
+  while ((match = audioRegex.exec(html))) {
+    return match[2];
+  }
+  return null;
 }
 
-async function fetchPostHtml(url) {
+function extractFromLinks(html) {
+  const linkRegex = /<a[^>]+href="([^"]+\.mp3[^"]*)"/gi;
+  let match;
+  while ((match = linkRegex.exec(html))) {
+    return match[1];
+  }
+  return null;
+}
+
+function extractIframeSrcs(html) {
+  const iframeRegex = /<iframe[^>]+src="([^"]+)"/gi;
+  const urls = [];
+  let match;
+  while ((match = iframeRegex.exec(html))) {
+    urls.push(match[1]);
+  }
+  return urls;
+}
+
+async function fetchText(url) {
   try {
     const res = await fetch(url);
     return await res.text();
   } catch {
     return null;
   }
+}
+
+// Archive.org / PodBean / SoundCloud iframe handler
+async function extractFromIframeUrl(url) {
+  const html = await fetchText(url);
+  if (!html) return null;
+
+  // Try direct MP3s in iframe page
+  let mp3 =
+    extractDirectMp3(html) ||
+    extractFromAudioTags(html) ||
+    extractFromLinks(html);
+
+  return mp3;
+}
+
+async function extractMp3FromPost(postHtml) {
+  // 1. Direct MP3s, audio/source, links
+  let mp3 =
+    extractDirectMp3(postHtml) ||
+    extractFromAudioTags(postHtml) ||
+    extractFromLinks(postHtml);
+
+  if (mp3) return mp3;
+
+  // 2. Iframes (Archive.org, PodBean, SoundCloud players)
+  const iframeUrls = extractIframeSrcs(postHtml);
+  for (const iframeUrl of iframeUrls) {
+    const candidate = await extractFromIframeUrl(iframeUrl);
+    if (candidate) return candidate;
+  }
+
+  // Strict Option A: skip if still no MP3
+  return null;
+}
+
+// --- Feed fetching ---
+
+async function fetchFeed(url) {
+  const text = await fetchText(url);
+  return text || "";
 }
 
 (async () => {
@@ -41,7 +105,6 @@ async function fetchPostHtml(url) {
 
   const items1 = Array.from(doc1.getElementsByTagName("item"));
   const items2 = Array.from(doc2.getElementsByTagName("item"));
-
   const allItems = [...items1, ...items2];
 
   let output = `<?xml version="1.0" encoding="UTF-8"?>
@@ -66,12 +129,11 @@ async function fetchPostHtml(url) {
     if (!titleNode || !linkNode || !pubDateNode) continue;
 
     const postUrl = linkNode.textContent.trim();
-    const postHtml = await fetchPostHtml(postUrl);
+    const postHtml = await fetchText(postUrl);
     if (!postHtml) continue;
 
-    // Extract MP3 from the actual blog post HTML
-    const mp3Url = extractMp3FromHtml(postHtml);
-    if (!mp3Url) continue; // Option A strict: skip if no MP3
+    const mp3Url = await extractMp3FromPost(postHtml);
+    if (!mp3Url) continue; // strict: only episodes with real MP3s
 
     const serializer = new XMLSerializer();
     let xml = serializer.serializeToString(item);
