@@ -1,7 +1,6 @@
 const fs = require("fs");
 const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
 const crypto = require("crypto");
-
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -9,20 +8,7 @@ const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
 // ------------------------------------------------------------
-// HTML ENTITY DECODER
-// ------------------------------------------------------------
-function decodeHtmlEntities(str) {
-  return str
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'");
-}
-
-// ------------------------------------------------------------
-// BASIC HELPERS
+// HELPERS
 // ------------------------------------------------------------
 async function fetchText(url) {
   try {
@@ -40,82 +26,23 @@ function extractDirectMp3(html) {
   return matches ? matches[0] : null;
 }
 
-function extractArchiveItemUrl(html) {
-  const re = /https:\/\/archive\.org\/(?:details|embed)\/[^\s"'<>]+/gi;
-  const matches = html.match(re);
-  return matches ? matches[0] : null;
-}
-
-function extractPodbeanUrl(html) {
-  const re = /https:\/\/www\.podbean\.com\/ep\/[^\s"'<>]+/gi;
-  const matches = html.match(re);
-  return matches ? matches[0] : null;
-}
-
-// ------------------------------------------------------------
-// HOST-SPECIFIC EXTRACTION
-// ------------------------------------------------------------
-async function extractMp3FromArchiveItem(itemUrl) {
-  console.log(`🔍 Fetching Archive.org item: ${itemUrl}`);
-  const html = await fetchText(itemUrl);
-  if (!html) return null;
-
-  const mp3 = extractDirectMp3(html);
-  if (mp3) console.log(`✅ Found MP3 on Archive.org: ${mp3}`);
-  return mp3;
-}
-
-async function extractMp3FromPodbean(itemUrl) {
-  console.log(`🔍 Fetching PodBean episode: ${itemUrl}`);
-  const html = await fetchText(itemUrl);
-  if (!html) return null;
-
-  const mp3 = extractDirectMp3(html);
-  if (mp3) console.log(`✅ Found MP3 on PodBean: ${mp3}`);
-  return mp3;
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
 }
 
 // ------------------------------------------------------------
-// MASTER EXTRACTION PIPELINE
-// ------------------------------------------------------------
-async function extractMp3FromItemContent(contentHtml) {
-  let mp3 = extractDirectMp3(contentHtml);
-  if (mp3) {
-    console.log(`✅ Direct MP3 found: ${mp3}`);
-    return mp3;
-  }
-
-  const archiveUrl = extractArchiveItemUrl(contentHtml);
-  if (archiveUrl) {
-    const archiveMp3 = await extractMp3FromArchiveItem(archiveUrl);
-    if (archiveMp3) return archiveMp3;
-  }
-
-  const podbeanUrl = extractPodbeanUrl(contentHtml);
-  if (podbeanUrl) {
-    const podbeanMp3 = await extractMp3FromPodbean(podbeanUrl);
-    if (podbeanMp3) return podbeanMp3;
-  }
-
-  console.log("⚠️ No MP3 found in item content.");
-  return null;
-}
-
-// ------------------------------------------------------------
-// FEED FETCHING
-// ------------------------------------------------------------
-async function fetchFeed(url) {
-  console.log(`📡 Fetching feed: ${url}`);
-  const text = await fetchText(url);
-  return text || "";
-}
-
-// ------------------------------------------------------------
-// MAIN SCRIPT
+// MAIN
 // ------------------------------------------------------------
 (async () => {
-  const xml1 = await fetchFeed(FEED1);
-  const xml2 = await fetchFeed(FEED2);
+  console.log("📡 Fetching feeds...");
+  const xml1 = await fetchText(FEED1);
+  const xml2 = await fetchText(FEED2);
 
   const parser = new DOMParser();
   const doc1 = parser.parseFromString(xml1, "text/xml");
@@ -123,29 +50,55 @@ async function fetchFeed(url) {
 
   const items1 = Array.from(doc1.getElementsByTagName("item"));
   const items2 = Array.from(doc2.getElementsByTagName("item"));
-  const allItems = [...items1, ...items2];
+  let allItems = [...items1, ...items2];
 
+  console.log(`📦 Total items before filtering: ${allItems.length}`);
+
+  // Extract publication dates and sort
+  allItems = allItems
+    .map(item => {
+      const dateNode = item.getElementsByTagName("pubDate")[0];
+      const date = dateNode ? new Date(dateNode.textContent.trim()) : new Date(0);
+      return { item, date };
+    })
+    .sort((a, b) => b.date - a.date)
+    .slice(0, 100); // LAST 100 EPISODES
+
+  console.log(`🎧 Keeping most recent 100 episodes.`);
+
+  // Build output feed
   let output = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"
-  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
-  xmlns:atom="http://www.w3.org/2005/Atom">
+     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+     xmlns:atom="http://www.w3.org/2005/Atom">
+
   <channel>
     <title>Charlie Meyerson Interviews</title>
     <link>https://charlesmeyerson.github.io/podcast.xml</link>
     <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />
+
     <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>
     <language>en-us</language>
+
     <itunes:author>Charles Meyerson</itunes:author>
-    <itunes:explicit>false</itunes:explicit>
+
+    <itunes:owner>
+      <itunes:name>Charles Meyerson</itunes:name>
+      <itunes:email>Meyerson@gmail.com</itunes:email>
+    </itunes:owner>
+
+    <itunes:image href="https://charlesmeyerson.github.io/cover.jpg" />
 `;
 
-  for (const item of allItems) {
+  const serializer = new XMLSerializer();
+
+  for (const { item } of allItems) {
     const titleNode = item.getElementsByTagName("title")[0];
     const contentNode = item.getElementsByTagName("content:encoded")[0];
     const descNode = item.getElementsByTagName("description")[0];
 
     const title = titleNode ? titleNode.textContent.trim() : "(untitled)";
-    console.log(`\n🎙 Processing: ${title}`);
+    console.log(`🎙 Processing: ${title}`);
 
     const rawHtml =
       (contentNode && contentNode.textContent) ||
@@ -153,24 +106,32 @@ async function fetchFeed(url) {
       "";
 
     const contentHtml = decodeHtmlEntities(rawHtml);
+    const mp3Url = extractDirectMp3(contentHtml);
 
-    const mp3Url = await extractMp3FromItemContent(contentHtml);
     if (!mp3Url) {
       console.log(`🚫 Skipping "${title}" — no MP3 found.`);
       continue;
     }
 
-    const serializer = new XMLSerializer();
     let xml = serializer.serializeToString(item);
 
+    // Remove existing GUID
     xml = xml.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
+
+    // Insert new GUID
     const guid = crypto.createHash("sha1").update(xml).digest("hex");
     xml = xml.replace(/<title>/i, `<guid isPermaLink="false">${guid}</guid>\n<title>`);
 
+    // Remove existing enclosure
     xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
-    xml = xml.replace(/<title>/i, `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`);
 
-    // Wrap description in CDATA to prevent XML breakage
+    // Insert new enclosure
+    xml = xml.replace(
+      /<title>/i,
+      `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
+    );
+
+    // Wrap description in CDATA
     xml = xml.replace(
       /<description>([\s\S]*?)<\/description>/i,
       (match, inner) => `<description><![CDATA[${inner}]]></description>`
