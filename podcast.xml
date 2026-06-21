@@ -4,6 +4,8 @@
     <title>Charlie Meyerson Interviews</title>
     <link>https://charlesmeyerson.github.io/podcast.xml</link>
     <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />
+    <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+    <link rel="self" href="https://charlesmeyerson.github.io/podcast.xml"/>
     <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>
     <language>en-us</language>
     <copyright>2026 Charles Meyerson</copyright>
