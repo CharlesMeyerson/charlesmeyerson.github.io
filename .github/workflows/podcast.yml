@@ -28,7 +28,7 @@ jobs:
           # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
 
-      - name: Build final podcast.xml
+            - name: Build final podcast.xml
         run: |
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
@@ -37,6 +37,12 @@ jobs:
             echo '    <title>Charlie Meyerson Interviews</title>'
             echo '    <link>https://charlesmeyerson.github.io/podcast.xml</link>'
             echo '    <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />'
+
+            # >>> INSERTED WEBSUB TAGS <<<
+            echo '    <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>'
+            echo '    <link rel="self" href="https://charlesmeyerson.github.io/podcast.xml"/>'
+            # >>> END INSERTION <<<
+
             echo '    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>'
             echo '    <language>en-us</language>'
             echo '    <copyright>2026 Charles Meyerson</copyright>'
@@ -54,6 +60,13 @@ jobs:
             echo '  </channel>'
             echo '</rss>'
           } > podcast.xml
+
+      - name: Ping WebSub hub
+        run: |
+          curl -X POST https://pubsubhubbub.appspot.com/publish \
+            -d "hub.mode=publish" \
+            -d "hub.url=https://charlesmeyerson.github.io/podcast.xml"
+
 
       - name: Commit and push changes
         run: |
