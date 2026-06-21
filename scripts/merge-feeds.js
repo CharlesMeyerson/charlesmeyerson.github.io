@@ -51,6 +51,15 @@ output += "    <itunes:explicit>false</itunes:explicit>\n";
 
 // Process each item
 allItems.forEach((item, index) => {
+    // Skip empty or malformed items (FeedBurner sometimes emits blank <item> blocks)
+  const titleNode = item.getElementsByTagName("title")[0];
+  const linkNode = item.getElementsByTagName("link")[0];
+  const pubDateNode = item.getElementsByTagName("pubDate")[0];
+
+  if (!titleNode || !linkNode || !pubDateNode) {
+    return; // Skip this item entirely
+  }
+
   const serializer = new XMLSerializer();
   let xml = serializer.serializeToString(item);
   // Remove any existing GUIDs from the source feed
