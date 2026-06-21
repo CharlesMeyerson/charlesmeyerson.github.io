@@ -1,20 +1,42 @@
-Run node scripts/merge-feeds.js
-/home/runner/work/charlesmeyerson.github.io/charlesmeyerson.github.io/scripts/merge-feeds.js:135
+const fs = require("fs");
+const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
+const crypto = require("crypto");
 
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
+const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-SyntaxError: Unexpected end of input
-    at wrapSafe (node:internal/modules/cjs/loader:1713:18)
-    at Module._compile (node:internal/modules/cjs/loader:1755:20)
-    at Object..js (node:internal/modules/cjs/loader:1913:10)
-    at Module.load (node:internal/modules/cjs/loader:1505:32)
-    at Function._load (node:internal/modules/cjs/loader:1309:12)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
-    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
-    at node:internal/main/run_main_module:36:49
+// -------------------- BASIC HELPERS --------------------
 
-Node.js v22.22.3
-Error: Process completed with exit code 1.
+async function fetchText(url) {
+  try {
+    const res = await fetch(url);
+    return await res.text();
+  } catch (err) {
+    console.error(`❌ Fetch failed for ${url}:`, err.message);
+    return null;
+  }
+}
+
+function extractDirectMp3(html) {
+  const re = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
+  const matches = html.match(re);
+  return matches ? matches[0] : null;
+}
+
+function extractArchiveItemUrl(html) {
+  const re = /https:\/\/archive\.org\/(?:details|embed)\/[^\s"'<>]+/gi;
+  const matches = html.match(re);
+  return matches ? matches[0] : null;
+}
+
+function extractPodbeanUrl(html) {
+  const re = /https:\/\/www\.podbean\.com\/ep\/[^\s"'<>]+/gi;
+  const matches = html.match(re);
+  return matches ? matches[0] : null;
+}
 
 // -------------------- HOST-SPECIFIC EXTRACTION --------------------
 
@@ -102,7 +124,7 @@ async function fetchFeed(url) {
     <itunes:explicit>false</itunes:explicit>
 `;
 
-   for (const item of allItems) {
+      for (const item of allItems) {
     const titleNode = item.getElementsByTagName("title")[0];
     const contentNode = item.getElementsByTagName("content:encoded")[0];
     const descNode = item.getElementsByTagName("description")[0];
@@ -141,3 +163,6 @@ async function fetchFeed(url) {
   fs.writeFileSync("../podcast.xml", output);
   console.log("✅ podcast.xml written successfully.");
 })();
+
+
+
