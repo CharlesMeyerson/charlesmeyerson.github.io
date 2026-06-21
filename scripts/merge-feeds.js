@@ -1,101 +1,94 @@
 const fs = require("fs");
 const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
 const crypto = require("crypto");
-
-// Node 18+ fetch in CommonJS
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-// Source feeds
 const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-// --- Basic HTML fetch ---
+// --- helpers -------------------------------------------------------------
+
 async function fetchText(url) {
   try {
     const res = await fetch(url);
     return await res.text();
-  } catch {
+  } catch (err) {
+    console.error(`❌ Fetch failed for ${url}:`, err.message);
     return null;
   }
 }
 
-// --- Direct MP3 extraction ---
 function extractDirectMp3(html) {
-  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
-  const matches = html.match(mp3Regex);
-  return matches ? matches[0] : null;
-}
-
-// --- <audio> / <source> tags ---
-function extractFromAudioTags(html) {
-  const audioRegex = /<(audio|source)[^>]+src="([^"]+\.mp3[^"]*)"/gi;
-  let match;
-  while ((match = audioRegex.exec(html))) {
-    return match[2];
-  }
-  return null;
-}
-
-// --- <a href="...mp3"> links ---
-function extractFromLinks(html) {
-  const linkRegex = /<a[^>]+href="([^"]+\.mp3[^"]*)"/gi;
-  let match;
-  while ((match = linkRegex.exec(html))) {
-    return match[1];
-  }
-  return null;
-}
-
-// --- Archive.org item URL detection ---
-function extractArchiveItemUrl(html) {
-  const re = /https:\/\/archive\.org\/details\/[^\s"'<>]+/gi;
+  const re = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
   const matches = html.match(re);
   return matches ? matches[0] : null;
 }
 
-// --- Extract MP3 from Archive.org item page ---
+function extractArchiveItemUrl(html) {
+  const re = /https:\/\/archive\.org\/(?:details|embed)\/[^\s"'<>]+/gi;
+  const matches = html.match(re);
+  return matches ? matches[0] : null;
+}
+
+function extractPodbeanUrl(html) {
+  const re = /https:\/\/www\.podbean\.com\/ep\/[^\s"'<>]+/gi;
+  const matches = html.match(re);
+  return matches ? matches[0] : null;
+}
+
 async function extractMp3FromArchiveItem(itemUrl) {
+  console.log(`🔍 Fetching Archive.org item: ${itemUrl}`);
   const html = await fetchText(itemUrl);
   if (!html) return null;
-
-  // Archive.org pages often contain direct MP3 links
-  const mp3 =
-    extractDirectMp3(html) ||
-    extractFromAudioTags(html) ||
-    extractFromLinks(html);
-
+  const mp3 = extractDirectMp3(html);
+  if (mp3) console.log(`✅ Found MP3 on Archive.org: ${mp3}`);
   return mp3;
 }
 
-// --- Main MP3 extraction pipeline ---
-async function extractMp3FromPost(postHtml) {
-  // 1. Direct MP3s in the blog post itself
-  let mp3 =
-    extractDirectMp3(postHtml) ||
-    extractFromAudioTags(postHtml) ||
-    extractFromLinks(postHtml);
+async function extractMp3FromPodbean(itemUrl) {
+  console.log(`🔍 Fetching PodBean episode: ${itemUrl}`);
+  const html = await fetchText(itemUrl);
+  if (!html) return null;
+  const mp3 = extractDirectMp3(html);
+  if (mp3) console.log(`✅ Found MP3 on PodBean: ${mp3}`);
+  return mp3;
+}
 
-  if (mp3) return mp3;
+async function extractMp3FromItemContent(contentHtml) {
+  // 1️⃣ Direct MP3s
+  let mp3 = extractDirectMp3(contentHtml);
+  if (mp3) {
+    console.log(`✅ Direct MP3 found: ${mp3}`);
+    return mp3;
+  }
 
-  // 2. Archive.org item links in the blog post
-  const archiveItemUrl = extractArchiveItemUrl(postHtml);
-  if (archiveItemUrl) {
-    const archiveMp3 = await extractMp3FromArchiveItem(archiveItemUrl);
+  // 2️⃣ Archive.org
+  const archiveUrl = extractArchiveItemUrl(contentHtml);
+  if (archiveUrl) {
+    const archiveMp3 = await extractMp3FromArchiveItem(archiveUrl);
     if (archiveMp3) return archiveMp3;
   }
 
-  // Strict Option A: skip if still no MP3
+  // 3️⃣ PodBean
+  const podbeanUrl = extractPodbeanUrl(contentHtml);
+  if (podbeanUrl) {
+    const podbeanMp3 = await extractMp3FromPodbean(podbeanUrl);
+    if (podbeanMp3) return podbeanMp3;
+  }
+
+  console.log("⚠️ No MP3 found in item content.");
   return null;
 }
 
-// --- Fetch RSS feed ---
+// --- main ---------------------------------------------------------------
+
 async function fetchFeed(url) {
+  console.log(`📡 Fetching feed: ${url}`);
   const text = await fetchText(url);
   return text || "";
 }
 
-// --- Main script ---
 (async () => {
   const xml1 = await fetchFeed(FEED1);
   const xml2 = await fetchFeed(FEED2);
@@ -125,46 +118,17 @@ async function fetchFeed(url) {
   for (const item of allItems) {
     const titleNode = item.getElementsByTagName("title")[0];
     const linkNode = item.getElementsByTagName("link")[0];
-    const pubDateNode = item.getElementsByTagName("pubDate")[0];
+    const contentNode = item.getElementsByTagName("content:encoded")[0];
+    const descNode = item.getElementsByTagName("description")[0];
 
-    if (!titleNode || !linkNode || !pubDateNode) continue;
+    const title = titleNode ? titleNode.textContent.trim() : "(untitled)";
+    console.log(`\n🎙 Processing: ${title}`);
 
-    const postUrl = linkNode.textContent.trim();
-    const postHtml = await fetchText(postUrl);
-    if (!postHtml) continue;
+    const contentHtml =
+      (contentNode && contentNode.textContent) ||
+      (descNode && descNode.textContent) ||
+      "";
 
-    const mp3Url = await extractMp3FromPost(postHtml);
-    if (!mp3Url) continue; // strict: only episodes with real MP3s
-
-    const serializer = new XMLSerializer();
-    let xml = serializer.serializeToString(item);
-
-    // Remove existing GUIDs
-    xml = xml.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
-
-    // Insert new GUID
-    const guid = crypto.createHash("sha1").update(xml).digest("hex");
-    xml = xml.replace(
-      /<title>/i,
-      `<guid isPermaLink="false">${guid}</guid>\n<title>`
-    );
-
-    // Remove existing enclosures
-    xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
-
-    // Insert enclosure
-    xml = xml.replace(
-      /<title>/i,
-      `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
-    );
-
-    output += xml + "\n";
-  }
-
-  output += `
-  </channel>
-</rss>`;
-
-  // Write to repo root
-  fs.writeFileSync("../podcast.xml", output);
-})();
+    const mp3Url = await extractMp3FromItemContent(contentHtml);
+    if (!mp3Url) {
+      console.log(`🚫 Skipping "${title}" — no MP3 found.`);
