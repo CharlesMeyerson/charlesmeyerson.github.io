@@ -6,45 +6,11 @@ const crypto = require("crypto");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+// Source feeds
 const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
 const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
 
-// --- MP3 extraction helpers ---
-
-function extractDirectMp3(html) {
-  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
-  const matches = html.match(mp3Regex);
-  return matches ? matches[0] : null;
-}
-
-function extractFromAudioTags(html) {
-  const audioRegex = /<(audio|source)[^>]+src="([^"]+\.mp3[^"]*)"/gi;
-  let match;
-  while ((match = audioRegex.exec(html))) {
-    return match[2];
-  }
-  return null;
-}
-
-function extractFromLinks(html) {
-  const linkRegex = /<a[^>]+href="([^"]+\.mp3[^"]*)"/gi;
-  let match;
-  while ((match = linkRegex.exec(html))) {
-    return match[1];
-  }
-  return null;
-}
-
-function extractIframeSrcs(html) {
-  const iframeRegex = /<iframe[^>]+src="([^"]+)"/gi;
-  const urls = [];
-  let match;
-  while ((match = iframeRegex.exec(html))) {
-    urls.push(match[1]);
-  }
-  return urls;
-}
-
+// --- Basic HTML fetch ---
 async function fetchText(url) {
   try {
     const res = await fetch(url);
@@ -54,13 +20,47 @@ async function fetchText(url) {
   }
 }
 
-// Archive.org / PodBean / SoundCloud iframe handler
-async function extractFromIframeUrl(url) {
-  const html = await fetchText(url);
+// --- Direct MP3 extraction ---
+function extractDirectMp3(html) {
+  const mp3Regex = /(https?:\/\/[^\s"'<>]+\.mp3[^\s"'<>]*)/gi;
+  const matches = html.match(mp3Regex);
+  return matches ? matches[0] : null;
+}
+
+// --- <audio> / <source> tags ---
+function extractFromAudioTags(html) {
+  const audioRegex = /<(audio|source)[^>]+src="([^"]+\.mp3[^"]*)"/gi;
+  let match;
+  while ((match = audioRegex.exec(html))) {
+    return match[2];
+  }
+  return null;
+}
+
+// --- <a href="...mp3"> links ---
+function extractFromLinks(html) {
+  const linkRegex = /<a[^>]+href="([^"]+\.mp3[^"]*)"/gi;
+  let match;
+  while ((match = linkRegex.exec(html))) {
+    return match[1];
+  }
+  return null;
+}
+
+// --- Archive.org item URL detection ---
+function extractArchiveItemUrl(html) {
+  const re = /https:\/\/archive\.org\/details\/[^\s"'<>]+/gi;
+  const matches = html.match(re);
+  return matches ? matches[0] : null;
+}
+
+// --- Extract MP3 from Archive.org item page ---
+async function extractMp3FromArchiveItem(itemUrl) {
+  const html = await fetchText(itemUrl);
   if (!html) return null;
 
-  // Try direct MP3s in iframe page
-  let mp3 =
+  // Archive.org pages often contain direct MP3 links
+  const mp3 =
     extractDirectMp3(html) ||
     extractFromAudioTags(html) ||
     extractFromLinks(html);
@@ -68,8 +68,9 @@ async function extractFromIframeUrl(url) {
   return mp3;
 }
 
+// --- Main MP3 extraction pipeline ---
 async function extractMp3FromPost(postHtml) {
-  // 1. Direct MP3s, audio/source, links
+  // 1. Direct MP3s in the blog post itself
   let mp3 =
     extractDirectMp3(postHtml) ||
     extractFromAudioTags(postHtml) ||
@@ -77,24 +78,24 @@ async function extractMp3FromPost(postHtml) {
 
   if (mp3) return mp3;
 
-  // 2. Iframes (Archive.org, PodBean, SoundCloud players)
-  const iframeUrls = extractIframeSrcs(postHtml);
-  for (const iframeUrl of iframeUrls) {
-    const candidate = await extractFromIframeUrl(iframeUrl);
-    if (candidate) return candidate;
+  // 2. Archive.org item links in the blog post
+  const archiveItemUrl = extractArchiveItemUrl(postHtml);
+  if (archiveItemUrl) {
+    const archiveMp3 = await extractMp3FromArchiveItem(archiveItemUrl);
+    if (archiveMp3) return archiveMp3;
   }
 
   // Strict Option A: skip if still no MP3
   return null;
 }
 
-// --- Feed fetching ---
-
+// --- Fetch RSS feed ---
 async function fetchFeed(url) {
   const text = await fetchText(url);
   return text || "";
 }
 
+// --- Main script ---
 (async () => {
   const xml1 = await fetchFeed(FEED1);
   const xml2 = await fetchFeed(FEED2);
