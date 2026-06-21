@@ -100,13 +100,20 @@ function decodeHtmlEntities(str) {
     const title = titleNode ? titleNode.textContent.trim() : "(untitled)";
     console.log(`🎙 Processing: ${title}`);
 
+    // NEW: Prefer enclosure URL
+    const enclosureNode = item.getElementsByTagName("enclosure")[0];
+    const enclosureUrl = enclosureNode ? enclosureNode.getAttribute("url") : null;
+
+    // Fallback: search HTML for .mp3
     const rawHtml =
       (contentNode && contentNode.textContent) ||
       (descNode && descNode.textContent) ||
       "";
 
     const contentHtml = decodeHtmlEntities(rawHtml);
-    const mp3Url = extractDirectMp3(contentHtml);
+    const fallbackMp3 = extractDirectMp3(contentHtml);
+
+    const mp3Url = enclosureUrl || fallbackMp3;
 
     if (!mp3Url) {
       console.log(`🚫 Skipping "${title}" — no MP3 found.`);
