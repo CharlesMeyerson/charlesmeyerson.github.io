@@ -4,8 +4,8 @@ const crypto = require("crypto");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-const FEED1 = "https://feeds.feedburner.com/meyersonstrategy/podcasts";
-const FEED2 = "https://feeds.feedburner.com/chicagopublicsquare/podcasts";
+// ✅ Use your RSS Fusion merged feed
+const FEED = "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb";
 
 // ------------------------------------------------------------
 // HELPERS
@@ -40,22 +40,17 @@ function decodeHtmlEntities(str) {
 // MAIN
 // ------------------------------------------------------------
 (async () => {
-  console.log("📡 Fetching feeds...");
-  const xml1 = await fetchText(FEED1);
-  const xml2 = await fetchText(FEED2);
+  console.log("📡 Fetching RSS Fusion feed...");
+  const xml = await fetchText(FEED);
 
   const parser = new DOMParser();
-  const doc1 = parser.parseFromString(xml1, "text/xml");
-  const doc2 = parser.parseFromString(xml2, "text/xml");
+  const doc = parser.parseFromString(xml, "text/xml");
+  const items = Array.from(doc.getElementsByTagName("item"));
 
-  const items1 = Array.from(doc1.getElementsByTagName("item"));
-  const items2 = Array.from(doc2.getElementsByTagName("item"));
-  let allItems = [...items1, ...items2];
-
-  console.log(`📦 Total items before filtering: ${allItems.length}`);
+  console.log(`📦 Total items before filtering: ${items.length}`);
 
   // Extract publication dates and sort
-  allItems = allItems
+  const sortedItems = items
     .map(item => {
       const dateNode = item.getElementsByTagName("pubDate")[0];
       const date = dateNode ? new Date(dateNode.textContent.trim()) : new Date(0);
@@ -92,19 +87,16 @@ function decodeHtmlEntities(str) {
 
   const serializer = new XMLSerializer();
 
-  for (const { item } of allItems) {
+  for (const { item } of sortedItems) {
     const titleNode = item.getElementsByTagName("title")[0];
     const contentNode = item.getElementsByTagName("content:encoded")[0];
     const descNode = item.getElementsByTagName("description")[0];
+    const enclosureNode = item.getElementsByTagName("enclosure")[0];
 
     const title = titleNode ? titleNode.textContent.trim() : "(untitled)";
     console.log(`🎙 Processing: ${title}`);
 
-    // NEW: Prefer enclosure URL
-    const enclosureNode = item.getElementsByTagName("enclosure")[0];
     const enclosureUrl = enclosureNode ? enclosureNode.getAttribute("url") : null;
-
-    // Fallback: search HTML for .mp3
     const rawHtml =
       (contentNode && contentNode.textContent) ||
       (descNode && descNode.textContent) ||
@@ -112,7 +104,6 @@ function decodeHtmlEntities(str) {
 
     const contentHtml = decodeHtmlEntities(rawHtml);
     const fallbackMp3 = extractDirectMp3(contentHtml);
-
     const mp3Url = enclosureUrl || fallbackMp3;
 
     if (!mp3Url) {
@@ -120,31 +111,31 @@ function decodeHtmlEntities(str) {
       continue;
     }
 
-    let xml = serializer.serializeToString(item);
+    let xmlItem = serializer.serializeToString(item);
 
     // Remove existing GUID
-    xml = xml.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
+    xmlItem = xmlItem.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
 
     // Insert new GUID
-    const guid = crypto.createHash("sha1").update(xml).digest("hex");
-    xml = xml.replace(/<title>/i, `<guid isPermaLink="false">${guid}</guid>\n<title>`);
+    const guid = crypto.createHash("sha1").update(xmlItem).digest("hex");
+    xmlItem = xmlItem.replace(/<title>/i, `<guid isPermaLink="false">${guid}</guid>\n<title>`);
 
     // Remove existing enclosure
-    xml = xml.replace(/<enclosure\b[^>]*\/>/gi, "");
+    xmlItem = xmlItem.replace(/<enclosure\b[^>]*\/>/gi, "");
 
     // Insert new enclosure
-    xml = xml.replace(
+    xmlItem = xmlItem.replace(
       /<title>/i,
       `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
     );
 
     // Wrap description in CDATA
-    xml = xml.replace(
+    xmlItem = xmlItem.replace(
       /<description>([\s\S]*?)<\/description>/i,
       (match, inner) => `<description><![CDATA[${inner}]]></description>`
     );
 
-    output += xml + "\n";
+    output += xmlItem + "\n";
   }
 
   output += `
