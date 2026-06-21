@@ -54,7 +54,7 @@ allItems.forEach((item, index) => {
   const serializer = new XMLSerializer();
   let xml = serializer.serializeToString(item);
   // Remove any existing GUIDs from the source feed
-xml = xml.replace(/<guid[\s\S]*?<\/guid>/g, "");
+xml = xml.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
 
 
   // Extract link
