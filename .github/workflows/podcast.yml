@@ -18,54 +18,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Fetch RSS-Fusion feed (true XML)
+      - name: Fetch source feeds (FeedBurner)
         run: |
-          curl -L "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb?format=xml" -o rssfusion.xml
+          curl -L "https://feeds.feedburner.com/meyersonstrategy/podcasts" -o feed1.xml
+          curl -L "https://feeds.feedburner.com/chicagopublicsquare/podcasts" -o feed2.xml
 
-      - name: Extract <item> blocks safely
-        run: |
-          xmllint --xpath "//item" rssfusion.xml > items_raw.xml
-
-      - name: Enhance items (GUID, pubDate, duration, enclosure, episode, summary, keywords)
-        run: |
-          awk '
-            BEGIN { RS="</item>"; ORS="" }
-            NR>1 {
-              item = $0 "</item>"
-              match(item, /<link>([^<]+)<\/link>/, arr)
-              url = arr[1]
-              cmd = "printf \"%s\" \"" url "\" | sha1sum"
-              cmd | getline hash
-              close(cmd)
-              sub(/ .*/, "", hash)
-              sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
-              if (match(item, /<pubDate>([^<]+)<\/pubDate>/, d)) {
-                date = d[1]
-                gsub(/  +/, " ", date)
-                sub(/<pubDate>[^<]+<\/pubDate>/, "<pubDate>" date "</pubDate>", item)
-              }
-              sub(/<\/pubDate>/, "</pubDate>\n<itunes:duration>00:30:00</itunes:duration>", item)
-              sub(/<\/link>/, "</link>\n<enclosure url=\"" url "\" type=\"audio/mpeg\" />", item)
-              printf -v ep "%03d", NR-1
-              sub(/<\/link>/, "</link>\n<itunes:episode>" ep "</itunes:episode>", item)
-              if (match(item, /<description>([^<]+)<\/description>/, s)) {
-                summary = s[1]
-                gsub(/<\/?[^>]+>/, "", summary)
-                sub(/<description>[^<]+<\/description>/,
-                    "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>",
-                    item)
-              }
-              if (match(item, /<title>([^<]+)<\/title>/, t)) {
-                title = t[1]
-                sub(/<\/description>/,
-                    "</description>\n<itunes:keywords>" title ", interviews, journalism</itunes:keywords>",
-                    item)
-              }
-              print item "\n"
-            }
-          ' items_raw.xml > items_enhanced.xml
-
-      - name: Build final podcast.xml
+      - name: Merge feeds safely
         run: |
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
@@ -75,7 +33,6 @@ jobs:
             echo '    <link>https://charlesmeyerson.github.io/podcast.xml</link>'
             echo '    <atom:link href="https://charlesmeyerson.github.io/podcast.xml" rel="self" type="application/rss+xml" />'
             echo '    <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>'
-            echo '    <link rel="self" href="https://charlesmeyerson.github.io/podcast.xml"/>'
             echo '    <description>A curated collection of interviews and conversations by journalist Charles Meyerson.</description>'
             echo '    <language>en-us</language>'
             echo '    <copyright>2026 Charles Meyerson</copyright>'
@@ -89,21 +46,34 @@ jobs:
             echo '      <itunes:category text="Interviews"/>'
             echo '    </itunes:category>'
             echo '    <itunes:explicit>false</itunes:explicit>'
-            cat items_enhanced.xml
-            echo '  </channel>'
-            echo '</rss>'
-          } > podcast.xml
-
-      - name: Ping WebSub hub
-        run: |
-          curl -X POST https://pubsubhubbub.appspot.com/publish \
-            -d "hub.mode=publish" \
-            -d "hub.url=https://charlesmeyerson.github.io/podcast.xml"
-
-      - name: Commit and push changes
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add podcast.xml
-          git commit -m "Auto-update podcast feed with enhanced metadata" || true
-          git push
+            xmllint --xpath "//item" feed1.xml > items1.xml
+            xmllint --xpath "//item" feed2.xml > items2.xml
+            cat items1.xml items2.xml > items_merged.xml
+            awk '
+              BEGIN { RS="</item>"; ORS="" }
+              NR>1 {
+                item = $0 "</item>"
+                match(item, /<link>([^<]+)<\/link>/, arr)
+                url = arr[1]
+                cmd = "printf \"%s\" \"" url "\" | sha1sum"
+                cmd | getline hash
+                close(cmd)
+                sub(/ .*/, "", hash)
+                sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
+                if (match(item, /<pubDate>([^<]+)<\/pubDate>/, d)) {
+                  date = d[1]
+                  gsub(/  +/, " ", date)
+                  sub(/<pubDate>[^<]+<\/pubDate>/, "<pubDate>" date "</pubDate>", item)
+                }
+                sub(/<\/pubDate>/, "</pubDate>\n<itunes:duration>00:30:00</itunes:duration>", item)
+                sub(/<\/link>/, "</link>\n<enclosure url=\"" url "\" type=\"audio/mpeg\" />", item)
+                printf -v ep "%03d", NR-1
+                sub(/<\/link>/, "</link>\n<itunes:episode>" ep "</itunes:episode>", item)
+                if (match(item, /<description>([^<]+)<\/description>/, s)) {
+                  summary = s[1]
+                  gsub(/<\/?[^>]+>/, "", summary)
+                  sub(/<description>[^<]+<\/description>/,
+                      "<description>" summary "</description>\n<itunes:summary>" summary "</itunes:summary>",
+                      item)
+                }
+                if (match(item, /<title>([^<]+)<\/title>
