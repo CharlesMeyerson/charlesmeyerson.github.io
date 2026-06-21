@@ -1,5 +1,3 @@
-# force reindex 2
-
 name: Build Podcast Feed
 
 on:
@@ -27,7 +25,26 @@ jobs:
 
       - name: Extract item entries (XML-safe)
         run: |
+          # Extract ONLY <item>...</item> blocks — nothing else.
           grep -oP '(?s)<item>.*?</item>' rssfusion.xml > items.xml
+
+      - name: Add GUIDs to each item
+        run: |
+          # Insert a GUID based on the <link> URL into each <item>.
+          awk '
+            BEGIN { RS="</item>"; ORS="" }
+            NR>1 {
+              item = $0 "</item>"
+              match(item, /<link>([^<]+)<\/link>/, arr)
+              url = arr[1]
+              cmd = "printf \"%s\" \"" url "\" | sha1sum"
+              cmd | getline hash
+              close(cmd)
+              sub(/ .*/, "", hash)
+              sub(/<item>/, "<item>\n<guid isPermaLink=\"false\">" hash "</guid>", item)
+              print item "\n"
+            }
+          ' items.xml > items_with_guid.xml
 
       - name: Build final podcast.xml
         run: |
@@ -53,7 +70,7 @@ jobs:
             echo '      <itunes:category text="Interviews"/>'
             echo '    </itunes:category>'
             echo '    <itunes:explicit>false</itunes:explicit>'
-            cat items.xml
+            cat items_with_guid.xml
             echo '  </channel>'
             echo '</rss>'
           } > podcast.xml
@@ -69,5 +86,5 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add podcast.xml
-          git commit -m "Auto-update podcast feed" || true
+          git commit -m "Auto-update podcast feed with GUIDs" || true
           git push
