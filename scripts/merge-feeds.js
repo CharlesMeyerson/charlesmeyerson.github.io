@@ -129,14 +129,18 @@ function decodeHtmlEntities(str) {
       `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
     );
 
-    // ✅ Wrap description in CDATA safely
-    xmlItem = xmlItem.replace(
-      /<description>([\s\S]*?)<\/description>/i,
-      (match, inner) => {
-        const safeInner = inner.replace(/]]>/g, "]]]]><![CDATA[>");
-        return `<description><![CDATA[${safeInner}]]></description>`;
-      }
+    // ✅ Wrap description in CDATA safely and strip stray HTML outside CDATA
+xmlItem = xmlItem.replace(
+  /<description>([\s\S]*?)<\/description>/i,
+  (match, inner) => {
+    // Decode entities and sanitize embedded CDATA closers
+    let safeInner = decodeHtmlEntities(inner);
+    safeInner = safeInner.replace(/]]>/g, "]]]]><![CDATA[>");
+    // Ensure no stray CDATA or HTML tags outside the wrapper
+    return `<description><![CDATA[${safeInner.trim()}]]></description>`;
+    }
     );
+
 
     output += xmlItem + "\n";
   }
