@@ -53,6 +53,9 @@ output += "    <itunes:explicit>false</itunes:explicit>\n";
 allItems.forEach((item, index) => {
   const serializer = new XMLSerializer();
   let xml = serializer.serializeToString(item);
+  // Remove any existing GUIDs from the source feed
+xml = xml.replace(/<guid[\s\S]*?<\/guid>/g, "");
+
 
   // Extract link
   const linkMatch = xml.match(/<link>([^<]+)<\/link>/);
