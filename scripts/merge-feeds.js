@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { DOMParser, XMLSerializer } = require("xmldom");
+const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
 const fetch = require("node-fetch");
 
 // Source feeds
