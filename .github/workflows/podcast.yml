@@ -1,13 +1,12 @@
 name: Build Podcast Feed
 
 on:
-
-permissions:
-  contents: write
-
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -38,18 +37,3 @@ jobs:
           git add podcast.xml
           git commit -m "Update podcast feed" || echo "No changes to commit"
           git push
-
-
-      - name: Commit and push changes
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add podcast.xml
-          git commit -m "Auto-update merged podcast feed" || true
-          git push
-
-      - name: Ping WebSub hub
-        run: |
-          curl -X POST https://pubsubhubbub.appspot.com/publish \
-            -d "hub.mode=publish" \
-            -d "hub.url=https://charlesmeyerson.github.io/podcast.xml"
