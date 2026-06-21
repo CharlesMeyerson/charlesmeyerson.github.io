@@ -4,12 +4,19 @@ const crypto = require("crypto");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-// ✅ Use your RSS Fusion merged feed
+// Use your RSS Fusion merged feed
 const FEED = "https://www.rss-fusion.com/r/1de9b/b80bb77402f85aa2fd9cc18cd06e3ef51755d4e2eb";
 
-// ------------------------------------------------------------
-// HELPERS
-// ------------------------------------------------------------
+// Escape XML special characters
+function escapeXml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 async function fetchText(url) {
   try {
     const res = await fetch(url);
@@ -36,9 +43,6 @@ function decodeHtmlEntities(str) {
     .replace(/&apos;/g, "'");
 }
 
-// ------------------------------------------------------------
-// MAIN
-// ------------------------------------------------------------
 (async () => {
   console.log("📡 Fetching RSS Fusion feed...");
   const xml = await fetchText(FEED);
@@ -49,7 +53,6 @@ function decodeHtmlEntities(str) {
 
   console.log(`📦 Total items before filtering: ${items.length}`);
 
-  // Extract publication dates and sort
   const sortedItems = items
     .map(item => {
       const dateNode = item.getElementsByTagName("pubDate")[0];
@@ -57,11 +60,10 @@ function decodeHtmlEntities(str) {
       return { item, date };
     })
     .sort((a, b) => b.date - a.date)
-    .slice(0, 100); // LAST 100 EPISODES
+    .slice(0, 100);
 
   console.log(`🎧 Keeping most recent 100 episodes.`);
 
-  // Build output feed
   let output = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"
      xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
@@ -97,14 +99,15 @@ function decodeHtmlEntities(str) {
     console.log(`🎙 Processing: ${title}`);
 
     const enclosureUrl = enclosureNode ? enclosureNode.getAttribute("url") : null;
+
     const rawHtml =
       (contentNode && contentNode.textContent) ||
       (descNode && descNode.textContent) ||
       "";
 
-    const contentHtml = decodeHtmlEntities(rawHtml);
-    const fallbackMp3 = extractDirectMp3(contentHtml);
-    const mp3Url = enclosureUrl || fallbackMp3;
+    const decoded = decodeHtmlEntities(rawHtml);
+    const mp3Fallback = extractDirectMp3(decoded);
+    const mp3Url = enclosureUrl || mp3Fallback;
 
     if (!mp3Url) {
       console.log(`🚫 Skipping "${title}" — no MP3 found.`);
@@ -113,34 +116,22 @@ function decodeHtmlEntities(str) {
 
     let xmlItem = serializer.serializeToString(item);
 
-    // Remove existing GUID
     xmlItem = xmlItem.replace(/<guid\b[^>]*>[\s\S]*?<\/guid>/gi, "");
 
-    // Insert new GUID
     const guid = crypto.createHash("sha1").update(xmlItem).digest("hex");
     xmlItem = xmlItem.replace(/<title>/i, `<guid isPermaLink="false">${guid}</guid>\n<title>`);
 
-    // Remove existing enclosure
     xmlItem = xmlItem.replace(/<enclosure\b[^>]*\/>/gi, "");
 
-    // Insert new enclosure
     xmlItem = xmlItem.replace(
       /<title>/i,
       `<enclosure url="${mp3Url}" type="audio/mpeg" length="0"/>\n<title>`
     );
 
-    // ✅ Wrap description in CDATA safely and strip stray HTML outside CDATA
-xmlItem = xmlItem.replace(
-  /<description>([\s\S]*?)<\/description>/i,
-  (match, inner) => {
-    // Decode entities and sanitize embedded CDATA closers
-    let safeInner = decodeHtmlEntities(inner);
-    safeInner = safeInner.replace(/]]>/g, "]]]]><![CDATA[>");
-    // Ensure no stray CDATA or HTML tags outside the wrapper
-    return `<description><![CDATA[${safeInner.trim()}]]></description>`;
-    }
+    xmlItem = xmlItem.replace(
+      /<description>([\s\S]*?)<\/description>/i,
+      (match, inner) => `<description>${escapeXml(inner.trim())}</description>`
     );
-
 
     output += xmlItem + "\n";
   }
